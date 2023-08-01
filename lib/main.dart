@@ -11,41 +11,86 @@ import 'package:flutter/widgets.dart';
 
 import 'package:network_info_plus/network_info_plus.dart';
 
-abstract class Theme {
-  Iterable<int> newGame({Set<int> exclude});
+typedef Coordinates = (int, int);
+typedef CardValue = int;
 
-  Widget buildCard(int value);
+extension GetCoordinates on int {
+  Coordinates get coordinates {
+    assert(this >= 0 && this < Board.size);
+    final int i = this ~/ Board.xSize;
+    final int j = this % Board.xSize;
+    return (i, j);
+  }
+}
+
+extension GetIndex on Coordinates {
+  int get index {
+    assert($1 >= 0 && $1 < Board.ySize);
+    assert($2 >= 0 && $2 < Board.xSize);
+    return $1 * Board.xSize + $2;
+  }
+}
+
+extension AsCoordinatesMap<T> on Iterable<T> {
+  Map<Coordinates, T> asCoordinatesMap() {
+    assert(length == Board.size);
+    final Map<Coordinates, T> result = <Coordinates, T>{};
+    int i = 0;
+    for (final T item in this) {
+      result[i.coordinates] = item;
+      i++;
+    }
+    return result;
+  }
+}
+
+extension AsIndexedList<T> on Map<Coordinates, T> {
+  List<T> asIndexedList() {
+    assert(length == Board.size);
+    final List<T?> result = List<T?>.filled(length, null);
+    forEach((Coordinates coordinates, T value) {
+      result[coordinates.index] = value;
+    });
+    assert(result.every((T? element) => element != null));
+    return result.cast<T>();
+  }
+}
+
+abstract class Theme {
+  Iterable<CardValue> newGame({Set<CardValue> exclude});
+
+  Widget buildCard(CardValue value);
 
   int get length;
 }
 
-class RandomizedIterable extends Object with Iterable<int> {
+class RandomizedIterable extends Object with Iterable<CardValue> {
   RandomizedIterable(this.length);
 
   @override
   final int length;
 
   @override
-  Iterator<int> get iterator => RandomizedIterator(length);
+  Iterator<CardValue> get iterator => RandomizedIterator(length);
 }
 
-class RandomizedIterator implements Iterator<int> {
+class RandomizedIterator implements Iterator<CardValue> {
   RandomizedIterator(this.length);
 
   final int length;
-  final Set<int> _usedIndexes = <int>{};
+  final Set<CardValue> _usedValues = <CardValue>{};
   final Random _random = Random(DateTime.now().microsecondsSinceEpoch);
 
   bool _currentNeedsCalculating = false;
-  int _current = -1;
+  CardValue _current = -1;
 
   @override
-  int get current {
+  CardValue get current {
     if (_currentNeedsCalculating) {
       do {
         _current = _random.nextInt(length);
-      } while (_usedIndexes.contains(_current));
-      _usedIndexes.add(_current);
+      } while (_usedValues.contains(_current));
+      _usedValues.add(_current);
       _currentNeedsCalculating = false;
     } else if (_current == -1) {
       throw StateError('moveNext() has not yet been called');
@@ -56,7 +101,7 @@ class RandomizedIterator implements Iterator<int> {
   @override
   bool moveNext() {
     _currentNeedsCalculating = true;
-    return _usedIndexes.length < length;
+    return _usedValues.length < length;
   }
 }
 
@@ -115,15 +160,16 @@ class ClassicTheme implements Theme {
   ];
 
   @override
-  Iterable<int> newGame({Set<int> exclude = const <int>{}}) {
-    final Set<int> excludeCopy = Set<int>.from(exclude);
-    return RandomizedIterable(_population.length).where((int value) {
+  Iterable<CardValue> newGame({Set<CardValue> exclude = const <CardValue>{}}) {
+    // TODO: do we still need to do this copy?
+    final Set<CardValue> excludeCopy = Set<CardValue>.from(exclude);
+    return RandomizedIterable(_population.length).where((CardValue value) {
       return !excludeCopy.contains(value);
     }).take(Board.size);
   }
 
   @override
-  Widget buildCard(int value) {
+  Widget buildCard(CardValue value) {
     return ColoredBox(
       color: const Color(0xfffff8ef),
       child: Center(
@@ -186,68 +232,40 @@ class NewAppInstanceMessage extends Message {
     final LocalClient localClient = NetworkBinding.instance.localClient;
     debugPrint('New app instance spawned at $ip; connecting to remote server');
     await localClient.connectToServer(ip);
-    await GameBinding.instance.boardController?.sync(ip);
+    await GameBinding.instance.controller?.sync(ip);
   }
 }
 
 class SyncAppStateMessage extends Message {
-  const SyncAppStateMessage(this.results, this.values, this.usedValues) : super(MessageType.syncAppState);
+  const SyncAppStateMessage(this.results, this.values, this.usedValues, this.revealed) : super(MessageType.syncAppState);
 
-  final Map<Coordinates, Result> results;
-  final Map<Coordinates, int> values;
-  final Set<int> usedValues;
+  final List<int> results;
+  final List<int> values;
+  final List<int> usedValues;
+  final List<bool> revealed;
 
-  static const String _keyResults = 'result';
   static const String _keyValues = 'values';
-  static const String _keyUsed = 'used';
+  static const String _keyUsedValues = 'used';
+  static const String _keyRevealed = 'revealed';
+  static const String _keyResults = 'results';
 
   factory SyncAppStateMessage.fromJson(Map<String, dynamic> payload) {
-    final Map<Coordinates, Result> results = payload[_keyResults]!.map<Coordinates, Result>((String key, dynamic value) {
-      final List<String> parts = key.split(',');
-      final Coordinates coordinates = (int.parse(parts[0]), int.parse(parts[1]));
-      final Result result;
-      switch (value) {
-        case 'unknown':
-          result = const Unknown();
-          break;
-        case 'neutral':
-          result = const Neutral();
-          break;
-        case 'death':
-          result = const Death();
-          break;
-        case 'red':
-          result = const Red();
-          break;
-        case 'blue':
-          result = const Blue();
-          break;
-        default:
-          throw ArgumentError();
-      }
-      return MapEntry<Coordinates, Result>(coordinates, result);
-    });
-    final Map<Coordinates, int> values = payload[_keyValues]!.map<Coordinates, int>((String key, dynamic value) {
-      final List<String> parts = key.split(',');
-      final Coordinates coordinates = (int.parse(parts[0]), int.parse(parts[1]));
-      return MapEntry<Coordinates, int>(coordinates, value);
-    });
-    final Set<int> usedValues = Set<int>.from(payload[_keyUsed]);
-    return SyncAppStateMessage(results, values, usedValues);
+    return SyncAppStateMessage(
+      payload[_keyResults].cast<int>(),
+      payload[_keyValues].cast<int>(),
+      payload[_keyUsedValues].cast<int>(),
+      payload[_keyRevealed].cast<bool>(),
+    );
   }
 
   @override
   Object toJson() {
-    Map<String, dynamic> data = <String, dynamic>{
-      _keyResults: results.map<String, String>((Coordinates key, Result value) {
-        return MapEntry<String, String>('${key.$1},${key.$2}', value.toJson());
-      }),
-      _keyValues: values.map<String, int>((Coordinates key, int value) {
-        return MapEntry<String, int>('${key.$1},${key.$2}', value);
-      }),
-      _keyUsed: usedValues.toList(),
+    return <String, dynamic>{
+      _keyResults: results,
+      _keyValues: values,
+      _keyUsedValues: usedValues,
+      _keyRevealed: revealed,
     };
-    return data;
   }
   
   @override
@@ -268,7 +286,7 @@ class Server {
 
   static const port = 26952;
 
-  AppDataCallback? onRemoteSync;
+  SyncAppStateCallback? onRemoteSync;
 
   Future<void> start() async {
     if (_socket == null) {
@@ -397,14 +415,14 @@ class LocalClient {
   }
 }
 
-typedef AppDataCallback = void Function(SyncAppStateMessage message);
+typedef SyncAppStateCallback = void Function(SyncAppStateMessage message);
 
 mixin GameBinding on AppBindingBase {
   /// The singleton instance of this object.
   static late GameBinding _instance;
   static GameBinding get instance => _instance;
 
-  BoardController? boardController;
+  GameController? controller;
 
   @override
   @protected
@@ -435,8 +453,8 @@ mixin NetworkBinding on AppBindingBase {
   late LocalNetwork _localNetwork;
   LocalNetwork get localNetwork => _localNetwork;
 
-  AppDataCallback? get onRemoteSync => localServer.onRemoteSync;
-  set onRemoteSync(AppDataCallback? callback) {
+  SyncAppStateCallback? get onRemoteSync => localServer.onRemoteSync;
+  set onRemoteSync(SyncAppStateCallback? callback) {
     localServer.onRemoteSync = callback;
   }
 
@@ -537,7 +555,7 @@ void main() {
     () async {
       runApp(const LoadingScreen());
       await AppBinding.ensureInitialized();
-      runApp(const CodeWordApp());
+      runApp(const CodewordApp());
     },
     (Object error, StackTrace stack) {
       debugPrint('Caught unhandled error by zone error handler.');
@@ -650,8 +668,8 @@ class Ip {
   String toString() => 'Ip($displayValue)';
 }
 
-class CodeWordApp extends StatelessWidget {
-  const CodeWordApp({super.key});
+class CodewordApp extends StatelessWidget {
+  const CodewordApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -672,7 +690,9 @@ class CodeWordApp extends StatelessWidget {
 }
 
 class Game extends StatefulWidget {
-  const Game({super.key});
+  const Game({super.key, this.theme = const ClassicTheme()});
+
+  final Theme theme;
 
   @override
   State<Game> createState() => _GameState();
@@ -683,25 +703,148 @@ class Game extends StatefulWidget {
 }
 
 abstract class GameController {
+  /// Reinitializes the game to contain a new set of values and results.
+  void newGame();
+
+  /// The theme of the game.
+  Theme get theme;
+
+  /// Gets the value of the card at the specified coordinates.
+  CardValue getValue(Coordinates coordinates);
+
+  /// Tells whether the card at the specified coordinates has been revealed.
+  bool isRevealed(Coordinates coordinates);
+
+  /// Gets the result of the card at the specified coordinates.
+  ///
+  /// The result is not necessarily shown to the user. Results are only shown
+  /// either once a player chooses a card or if the game is in codegiver mode.
   Result getResult(Coordinates coordinates);
+
+  void toggleRevealed(Coordinates coordinates);
+
+  bool get codegiverMode;
+  set codegiverMode(bool value);
+
+  /// Syncs the state of this game to remote clients.
+  ///
+  /// Once this future completes, the state of remote instances of this game
+  /// will match this local game's state.
+  ///
+  /// If [ip] is specified, this game's state will only be synced to the
+  /// specified remote instance. By default, this game's state is broadcast to
+  /// all remote instances.
+  Future<void> sync([String? ip]);
 }
 
 class _GameState extends State<Game> implements GameController {
-  late final ResultMap _map;
+  late List<CardValue> _values;
+  late List<CardValue> _usedValues;
+  late List<bool> _revealed;
+  late ResultMap _results;
+  bool _codegiverMode = false;
+
+  void _handleRemoteSync(SyncAppStateMessage message) {
+    assert(mounted);
+    setState(() {
+      _values = message.values;
+      _usedValues = message.usedValues;
+      _revealed = message.revealed;
+      _results = ResultMap.fromValues(message.results);
+    });
+  }
 
   @override
-  Result getResult(Coordinates coordinates) => _map[coordinates];
+  void newGame() {
+    setState(() {
+      _values = widget.theme.newGame(exclude: Set<CardValue>.from(_usedValues)).toList();
+      _usedValues.addAll(_values);
+      _revealed = List<bool>.filled(Board.size, false);
+      _results = ResultMap();
+      _codegiverMode = false;
+      if (_usedValues.length + Board.size > widget.theme.length) {
+        // We've used up all the cards
+        _usedValues.clear();
+      }
+    });
+  }
+
+  @override
+  Theme get theme => widget.theme;
+
+  @override
+  CardValue getValue(Coordinates coordinates) => _values[coordinates.index];
+
+  @override
+  bool isRevealed(Coordinates coordinates) => _revealed[coordinates.index];
+
+  @override
+  Result getResult(Coordinates coordinates) => _results[coordinates];
+
+  @override
+  void toggleRevealed(Coordinates coordinates) {
+    setState(() {
+      _revealed[coordinates.index] = !_revealed[coordinates.index];
+    });
+  }
+
+  @override
+  bool get codegiverMode => _codegiverMode;
+
+  @override
+  set codegiverMode(bool value) {
+    setState(() {
+      _codegiverMode = value;
+    });
+  }
+
+  @override
+  Future<void> sync([String? ip]) async {
+    final Message message = SyncAppStateMessage(
+      _results.values,
+      _values,
+      _usedValues,
+      _revealed,
+    );
+    if (ip == null) {
+      await NetworkBinding.instance.localClient.broadcastMessage(message);
+    } else {
+      await NetworkBinding.instance.localClient.sendMessage(ip, message);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant Game oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.theme != oldWidget.theme) {
+      _usedValues.clear();
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _map = ResultMap();
+    _usedValues = <CardValue>[];
+    newGame();
+    NetworkBinding.instance.onRemoteSync = _handleRemoteSync;
+    GameBinding.instance.controller = this;
+  }
+
+  @override
+  void dispose() {
+    GameBinding.instance.controller = null;
+    NetworkBinding.instance.onRemoteSync = null;
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return _GameScope(
       state: this,
+      valuesHash: Object.hashAll(_values),
+      revealedHash: Object.hashAll(_revealed),
+      resultsHash: Object.hashAll(_results.values),
+      codegiverMode: _codegiverMode,
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -734,36 +877,57 @@ class _GameScope extends InheritedWidget {
   const _GameScope({
     required super.child,
     required this.state,
+    required this.valuesHash,
+    required this.revealedHash,
+    required this.resultsHash,
+    required this.codegiverMode,
   });
 
   final _GameState state;
+  final int valuesHash;
+  final int revealedHash;
+  final int resultsHash;
+  final bool codegiverMode;
 
   @override
-  bool updateShouldNotify(_GameScope oldWidget) => false;
+  bool updateShouldNotify(_GameScope oldWidget) {
+    return valuesHash != oldWidget.valuesHash
+        || revealedHash != oldWidget.revealedHash
+        || resultsHash != oldWidget.resultsHash
+        || codegiverMode != oldWidget.codegiverMode;
+  }
 }
 
 class ActionBar extends StatelessWidget {
   const ActionBar({super.key});
 
   void _handleNewGame() {
-    final BoardController controller = GameBinding.instance.boardController!;
-    controller.reset();
+    final GameController controller = GameBinding.instance.controller!;
+    controller.newGame();
     controller.sync();
+  }
+
+  void _handleToggleCodegiverMode() {
+    final GameController controller = GameBinding.instance.controller!;
+    controller.codegiverMode = !controller.codegiverMode;
   }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Focus(
-            onFocusChange: (bool hasFocus) {debugPrint('button : $hasFocus');},
-            child: FloatingActionButton(
-              onPressed: _handleNewGame,
-              child: const Icon(Icons.refresh),
-            ),
+          ActionButton(
+            debugName: 'newGame',
+            icon: Icons.refresh,
+            onPressed: _handleNewGame,
+          ),
+          ActionButton(
+            debugName: 'toggleCodegiver',
+            icon: Icons.all_inclusive,
+            onPressed: _handleToggleCodegiverMode,
           ),
         ],
       ),
@@ -771,10 +935,37 @@ class ActionBar extends StatelessWidget {
   }
 }
 
-class Board extends StatefulWidget {
-  const Board({super.key, this.theme = const ClassicTheme()});
+class ActionButton extends StatelessWidget {
+  const ActionButton({
+    super.key,
+    required this.onPressed,
+    required this.icon,
+    this.debugName,
+  });
 
-  final Theme theme;
+  final VoidCallback onPressed;
+  final IconData icon;
+  final String? debugName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Focus(
+        onFocusChange: (bool hasFocus) {
+          debugPrint('$debugName has focus ? $hasFocus');
+        },
+        child: FloatingActionButton(
+          onPressed: onPressed,
+          child: Icon(icon),
+        ),
+      ),
+    );
+  }
+}
+
+class Board extends StatefulWidget {
+  const Board({super.key});
 
   static const int xSize = 5;
   static const int ySize = 5;
@@ -782,269 +973,165 @@ class Board extends StatefulWidget {
 
   @override
   State<Board> createState() => _BoardState();
-
-  static BoardController of(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<_BoardScope>()!.state;
-  }
 }
 
-class _BoardState extends State<Board> implements BoardController {
-  Coordinates? _coloring;
+class _BoardState extends State<Board> {
   final Map<Coordinates, GlobalKey<TileState>> _tiles = <Coordinates, GlobalKey<TileState>>{};
-  final Map<Coordinates, Result> _results = <Coordinates, Result>{};
-  final Map<Coordinates, int> _values = <Coordinates, int>{};
-  final Set<int> _usedValues = <int>{};
 
-  static const double borderRadius = 10;
-  static const double padding = 5;
+  // static const double borderRadius = 10;
+  // static const double padding = 5;
 
-  Iterable<Widget> _getResultPopup() {
-    Iterable<Widget> result = const Iterable<Widget>.empty();
-    if (_coloring != null) {
-      final GlobalKey<TileState> tile = _tiles[_coloring!]!;
-      final RenderBox tileRenderBox = tile.currentContext!.findRenderObject() as RenderBox;
-      final Offset tileGlobalOffset = tileRenderBox.localToGlobal(Offset.zero, ancestor: context.findRenderObject());
-      result = <Widget>[
-        Positioned(
-          left: tileGlobalOffset.dx,
-          top: tileGlobalOffset.dy,
-          child: Padding(
-            padding: const EdgeInsets.all(padding),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(borderRadius),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(borderRadius),
-                child: SizedBox(
-                  width: tileRenderBox.size.width - 2 * padding,
-                  height: tileRenderBox.size.height - 2 * padding,
-                  child: FocusScope(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Flexible(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              ResultPicker(autofocus: true, coordinates: _coloring!, result: const Death()),
-                              ResultPicker(coordinates: _coloring!, result: const Neutral()),
-                            ],
-                          ),
-                        ),
-                        Flexible(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              ResultPicker(coordinates: _coloring!, result: const Blue()),
-                              ResultPicker(coordinates: _coloring!, result: const Red()),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ];
-    }
-    return result;
-  }
+  // Iterable<Widget> _getResultPopup() {
+  //   Iterable<Widget> result = const Iterable<Widget>.empty();
+  //   if (_coloring != null) {
+  //     final GlobalKey<TileState> tile = _tiles[_coloring!]!;
+  //     final RenderBox tileRenderBox = tile.currentContext!.findRenderObject() as RenderBox;
+  //     final Offset tileGlobalOffset = tileRenderBox.localToGlobal(Offset.zero, ancestor: context.findRenderObject());
+  //     result = <Widget>[
+  //       Positioned(
+  //         left: tileGlobalOffset.dx,
+  //         top: tileGlobalOffset.dy,
+  //         child: Padding(
+  //           padding: const EdgeInsets.all(padding),
+  //           child: DecoratedBox(
+  //             decoration: BoxDecoration(
+  //               borderRadius: BorderRadius.circular(borderRadius),
+  //             ),
+  //             child: ClipRRect(
+  //               borderRadius: BorderRadius.circular(borderRadius),
+  //               child: SizedBox(
+  //                 width: tileRenderBox.size.width - 2 * padding,
+  //                 height: tileRenderBox.size.height - 2 * padding,
+  //                 child: FocusScope(
+  //                   child: Row(
+  //                     crossAxisAlignment: CrossAxisAlignment.stretch,
+  //                     children: [
+  //                       Flexible(
+  //                         child: Column(
+  //                           crossAxisAlignment: CrossAxisAlignment.stretch,
+  //                           children: [
+  //                             ResultPicker(autofocus: true, coordinates: _coloring!, result: const Assassin()),
+  //                             ResultPicker(coordinates: _coloring!, result: const Neutral()),
+  //                           ],
+  //                         ),
+  //                       ),
+  //                       Flexible(
+  //                         child: Column(
+  //                           crossAxisAlignment: CrossAxisAlignment.stretch,
+  //                           children: [
+  //                             ResultPicker(coordinates: _coloring!, result: const Blue()),
+  //                             ResultPicker(coordinates: _coloring!, result: const Red()),
+  //                           ],
+  //                         ),
+  //                       ),
+  //                     ],
+  //                   ),
+  //                 ),
+  //               ),
+  //             ),
+  //           ),
+  //         ),
+  //       ),
+  //     ];
+  //   }
+  //   return result;
+  // }
 
-  void _cancelResultsPopup() {
-    coloring = null;
-  }
+  // void _cancelResultsPopup() {
+  //   coloring = null;
+  // }
 
-  void _handleRemoteSync(SyncAppStateMessage message) {
-    assert(mounted);
-    setState(() {
-      _results.clear();
-      _results.addAll(message.results);
-      _values.clear();
-      _values.addAll(message.values);
-    });
-  }
+  // @override
+  // set coloring(Coordinates? coordinates) {
+  //   setState(() {
+  //     _coloring = coordinates;
+  //   });
+  // }
 
-  @override
-  set coloring(Coordinates? coordinates) {
-    setState(() {
-      _coloring = coordinates;
-    });
-  }
-  
-  @override
-  set result(Result result) {
-    assert(_coloring != null);
-    setState(() {
-      _results[_coloring!] = result;
-      _coloring = null;
-    });
-    sync();
-  }
-
-  @override
-  Future<void> sync([String? ip]) async {
-    final Message message = SyncAppStateMessage(_results, _values, _usedValues);
-    if (ip == null) {
-      await NetworkBinding.instance.localClient.broadcastMessage(message);
-    } else {
-      await NetworkBinding.instance.localClient.sendMessage(ip, message);
-    }
-  }
-
-  @override
-  void reset() {
-    setState(() {
-      _results.clear();
-      _values.clear();
-      final Iterator<int> randomValues = widget.theme.newGame(exclude: _usedValues).iterator;
-      for (int i = 0; i < Board.ySize; i++) {
-        for (int j = 0; j < Board.xSize; j++) {
-          final Coordinates coordinates = (i, j);
-          _tiles[coordinates] ??= GlobalKey<TileState>(debugLabel: 'Tile$coordinates');
-          randomValues.moveNext();
-          _values[coordinates] = randomValues.current;
-        }
-      }
-      _usedValues.addAll(_values.values);
-      if (_usedValues.length + Board.size > widget.theme.length) {
-        // We've used up all the cards
-        _usedValues.clear();
-      }
-    });
-  }
-
-  @override
-  void didUpdateWidget(covariant Board oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.theme != oldWidget.theme) {
-      _usedValues.clear();
-    }
-  }
+  // @override
+  // set result(Result result) {
+  //   assert(_coloring != null);
+  //   setState(() {
+  //     _results[_coloring!] = result;
+  //     _coloring = null;
+  //   });
+  //   sync();
+  // }
 
   @override
   void initState() {
-    reset();
-    NetworkBinding.instance.onRemoteSync = _handleRemoteSync;
-    GameBinding.instance.boardController = this;
     super.initState();
-  }
-
-  @override
-  void dispose() {
-    GameBinding.instance.boardController = null;
-    NetworkBinding.instance.onRemoteSync = null;
-    super.dispose();
+    for (int i = 0; i < Board.size; i++) {
+      final Coordinates coordinates = i.coordinates;
+      _tiles[coordinates] ??= GlobalKey<TileState>(debugLabel: 'Tile$coordinates');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return _BoardScope(
-      state: this,
-      child: Stack(
-        fit: StackFit.passthrough,
-        children: [
-          FocusScope(
-            autofocus: true,
-            child: Column(
+    return FocusScope(
+      autofocus: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: List<Widget>.generate(Board.ySize, (int i) {
+          return Flexible(
+            flex: 1,
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: List<Widget>.generate(Board.ySize, (int i) {
-                return Flexible(
-                  flex: 1,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: List<Widget>.generate(Board.xSize, (int j) {
-                      final Coordinates coordinates = (i, j);
-                      return Tile(
-                        key: _tiles[coordinates],
-                        theme: widget.theme,
-                        coordinates: coordinates,
-                        value: _values[coordinates]!,
-                        result: _results[coordinates] ?? const Unknown(),
-                      );
-                    }),
-                  ),
+              children: List<Widget>.generate(Board.xSize, (int j) {
+                final Coordinates coordinates = (i, j);
+                return Tile(
+                  key: _tiles[coordinates],
+                  coordinates: coordinates,
                 );
               }),
             ),
-          ),
-          GestureDetector(
-            onTap: _coloring == null ? null : _cancelResultsPopup,
-          ),
-          ... _getResultPopup(),
-        ],
+          );
+        }),
       ),
     );
   }
 }
 
-class ResultPicker extends StatelessWidget {
-  const ResultPicker({
-    super.key,
-    this.autofocus = false,
-    required this.coordinates,
-    required this.result,
-  });
+// class ResultPicker extends StatelessWidget {
+//   const ResultPicker({
+//     super.key,
+//     this.autofocus = false,
+//     required this.coordinates,
+//     required this.result,
+//   });
 
-  final bool autofocus;
-  final Coordinates coordinates;
-  final Result result;
+//   final bool autofocus;
+//   final Coordinates coordinates;
+//   final Result result;
 
-  void _handleSelect(BuildContext context) {
-    Board.of(context).result = result;
-  }
+//   void _handleSelect(BuildContext context) {
+//     Board.of(context).result = result;
+//   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Flexible(
-      child: Focus(
-        autofocus: autofocus,
-        child: SizedBox.expand(
-          child: GestureDetector(
-            onTap: () => _handleSelect(context),
-            child: result.build(),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-abstract class BoardController {
-  set coloring(Coordinates? coordinates);
-  set result(Result result);
-  Future<void> sync([String? ip]);
-  void reset();
-}
-
-class _BoardScope extends InheritedWidget {
-  const _BoardScope({
-    required super.child,
-    required this.state,
-  });
-
-  final _BoardState state;
-
-  @override
-  bool updateShouldNotify(_BoardScope oldWidget) => false;
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     return Flexible(
+//       child: Focus(
+//         autofocus: autofocus,
+//         child: SizedBox.expand(
+//           child: GestureDetector(
+//             onTap: () => _handleSelect(context),
+//             child: result.build(),
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+// }
 
 class Tile extends StatefulWidget {
   const Tile({
     super.key,
-    required this.theme,
     required this.coordinates,
-    required this.value,
-    this.result = const Unknown(),
   });
 
-  final Theme theme;
   final Coordinates coordinates;
-  final int value;
-  final Result result;
 
   @override
   State<Tile> createState() => TileState();
@@ -1052,13 +1139,13 @@ class Tile extends StatefulWidget {
 
 class TileState extends State<Tile> {
   bool _hasFocus = false;
+  late FocusNode _focusNode;
 
-  void _chooseColor() {
-    Board.of(context).coloring = widget.coordinates;
-  }
-
-  void _handleTap() {
-    _chooseColor();
+  void _handleToggleRevealed() {
+    GameController controller = Game.of(context);
+    controller.toggleRevealed(widget.coordinates);
+    controller.sync();
+    _focusNode.unfocus();
   }
 
   void _handleFocusChanged(bool hasFocus) {
@@ -1069,19 +1156,40 @@ class TileState extends State<Tile> {
 
   KeyEventResult _handleKeyEvent(FocusNode focusNode, KeyEvent event) {
     KeyEventResult result = KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.enter) {
-      _chooseColor();
-      result = KeyEventResult.handled;
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select) {
+        _handleToggleRevealed();
+        result = KeyEventResult.handled;
+      }
     }
     return result;
   }
 
   @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final GameController gameController = Game.of(context);
+    final CardValue value = gameController.getValue(widget.coordinates);
+    final bool isRevealed = gameController.isRevealed(widget.coordinates);
+    final bool isCodegiverMode = gameController.codegiverMode;
+    final Result result = gameController.getResult(widget.coordinates);
+
     return Flexible(
       flex: 1,
       fit: FlexFit.tight,
       child: Focus(
+        focusNode: _focusNode,
         onFocusChange: _handleFocusChanged,
         onKeyEvent: _handleKeyEvent,
         child: Padding(
@@ -1103,12 +1211,13 @@ class TileState extends State<Tile> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: GestureDetector(
-                      onTap: _handleTap,
+                      onTap: _handleToggleRevealed,
                       child: Stack(
                         fit: StackFit.passthrough,
                         children: [
-                          widget.theme.buildCard(widget.value),
-                          widget.result.build(),
+                          gameController.theme.buildCard(value),
+                          if (isRevealed) result.build()
+                          else if (isCodegiverMode) ColoredBox(color: result.color.withAlpha(0x88)),
                         ],
                       ),
                     ),
@@ -1123,22 +1232,33 @@ class TileState extends State<Tile> {
   }
 }
 
-sealed class Result {
-  const Result(this.color);
+enum ResultType {
+  neutral,
+  assassin,
+  red,
+  blue,
+}
 
+sealed class Result {
+  const Result(this.type, this.color);
+
+  factory Result.fromValue(int value) {
+    switch (ResultType.values[value]) {
+      case ResultType.neutral: return const Neutral();
+      case ResultType.assassin: return const Assassin();
+      case ResultType.red: return const Red();
+      case ResultType.blue: return const Blue();
+    }
+  }
+
+  final ResultType type;
   final Color color;
 
   Widget build() => ColoredBox(color: color);
-
-  String toJson() => runtimeType.toString().toLowerCase();
-}
-
-final class Unknown extends Result {
-  const Unknown() : super(const Color(0x00000000));
 }
 
 final class Neutral extends Result {
-  const Neutral() : super(const Color(0xffc8b4a0));
+  const Neutral() : super(ResultType.neutral, const Color(0xffc8b4a0));
 
   @override
   Widget build() {
@@ -1146,8 +1266,8 @@ final class Neutral extends Result {
   }
 }
 
-final class Death extends Result {
-  const Death() : super(const Color(0xff000000));
+final class Assassin extends Result {
+  const Assassin() : super(ResultType.assassin, const Color(0xff000000));
 
   @override
   Widget build() {
@@ -1156,7 +1276,7 @@ final class Death extends Result {
 }
 
 final class Red extends Result {
-  const Red() : super(const Color(0xffd25f4b));
+  const Red() : super(ResultType.red, const Color(0xffd25f4b));
 
   @override
   Widget build() {
@@ -1165,7 +1285,7 @@ final class Red extends Result {
 }
 
 final class Blue extends Result {
-  const Blue() : super(const Color(0xff4e7ba6));
+  const Blue() : super(ResultType.blue, const Color(0xff4e7ba6));
 
   @override
   Widget build() {
@@ -1176,20 +1296,33 @@ final class Blue extends Result {
 class ResultMap {
   ResultMap({Result? firstMove, Random? random}) {
     random ??= Random(DateTime.now().microsecondsSinceEpoch);
-    firstMove ??= _chooseRandomFirstMove(random);
+    this.firstMove = firstMove ?? _chooseRandomFirstMove(random);
     final List<Result> values = List<Result>.from(_seedValues)
-        ..add(firstMove)
+        ..add(this.firstMove)
         ..shuffle(random);
-    for (int i = 0; i < values.length; i++) {
-      final Coordinates coordinates = _getCoordinates(i);
-      _results[coordinates] = values[i];
+    _results = values.asCoordinatesMap();
+  }
+
+  ResultMap.fromValues(List<int> values) {
+    assert(values.length == Board.size);
+    assert(values.every((int value) => value >= 0 && value < ResultType.values.length));
+    assert(values.where((int value) => value == ResultType.assassin.index).length == 1);
+    assert(values.where((int value) => value == ResultType.neutral.index).length == 7);
+    assert(values.where((int value) => value == ResultType.red.index).length >= 8);
+    assert(values.where((int value) => value == ResultType.blue.index).length >= 8);
+    _results = values.map<Result>((int value) => Result.fromValue(value)).asCoordinatesMap();
+    if (values.where((int value) => value == ResultType.red.index).length == 9) {
+      firstMove = const Red();
+    } else {
+      firstMove = const Blue();
     }
   }
 
-  final Map<Coordinates, Result> _results = <Coordinates, Result>{};
+  late final Result firstMove;
+  late final Map<Coordinates, Result> _results;
 
   static const List<Result> _seedValues = <Result>[
-    Death(), Neutral(), Neutral(), Neutral(), Neutral(), Neutral(), Neutral(), Neutral(),
+    Assassin(), Neutral(), Neutral(), Neutral(), Neutral(), Neutral(), Neutral(), Neutral(),
     Blue(), Blue(), Blue(), Blue(), Blue(), Blue(), Blue(), Blue(),
     Red(), Red(), Red(), Red(), Red(), Red(), Red(), Red(),
   ];
@@ -1198,13 +1331,11 @@ class ResultMap {
     return random.nextBool() ? const Red() : const Blue();
   }
 
-  static Coordinates _getCoordinates(int index) {
-    final int i = index ~/ Board.xSize;
-    final int j = index % Board.xSize;
-    return (i, j);
-  }
-
   Result operator[](Coordinates coordinates) => _results[coordinates]!;
-}
 
-typedef Coordinates = (int, int);
+  List<int> get values {
+    return _results.asIndexedList()
+        .map<int>((Result result) => result.type.index)
+        .toList();
+  }
+}
