@@ -14,6 +14,14 @@ import 'package:network_info_plus/network_info_plus.dart';
 typedef Coordinates = (int, int);
 typedef CardValue = int;
 
+extension ToInt on bool {
+  int toInt() => this ? 1 : 0;
+}
+
+extension ToBool on int {
+  bool toBool() => this == 0 ? false : true;
+}
+
 extension GetCoordinates on int {
   Coordinates get coordinates {
     assert(this >= 0 && this < Board.size);
@@ -192,8 +200,8 @@ sealed class Message {
 
   final MessageType messageType;
 
-  static const String _keyMessageType = 'type';
-  static const String _keyPayload = 'payload';
+  static const String _keyMessageType = 't';
+  static const String _keyPayload = 'p';
 
   Object? toJson();
   void receive();
@@ -209,6 +217,7 @@ sealed class Message {
 
   static Message deserialize(List<int> serialized) {
     final Map<String, dynamic> envelope = json.decode(utf8.decode(serialized));
+    debugPrint('$envelope');
     final MessageType type = MessageType.values[envelope[_keyMessageType]];
     switch (type) {
       case MessageType.newAppInstance:
@@ -244,17 +253,17 @@ class SyncAppStateMessage extends Message {
   final List<int> usedValues;
   final List<bool> revealed;
 
-  static const String _keyValues = 'values';
-  static const String _keyUsedValues = 'used';
-  static const String _keyRevealed = 'revealed';
-  static const String _keyResults = 'results';
+  static const String _keyValues = 'v';
+  static const String _keyUsedValues = 'u';
+  static const String _keyRevealed = 'l';
+  static const String _keyResults = 'r';
 
   factory SyncAppStateMessage.fromJson(Map<String, dynamic> payload) {
     return SyncAppStateMessage(
       payload[_keyResults].cast<int>(),
       payload[_keyValues].cast<int>(),
       payload[_keyUsedValues].cast<int>(),
-      payload[_keyRevealed].cast<bool>(),
+      payload[_keyRevealed].cast<int>().map<bool>((int value) => value.toBool()).toList(),
     );
   }
 
@@ -264,7 +273,7 @@ class SyncAppStateMessage extends Message {
       _keyResults: results,
       _keyValues: values,
       _keyUsedValues: usedValues,
-      _keyRevealed: revealed,
+      _keyRevealed: revealed.map<int>((bool value) => value.toInt()).toList(),
     };
   }
   
@@ -726,6 +735,9 @@ abstract class GameController {
   bool get codegiverMode;
   set codegiverMode(bool value);
 
+  int get numRedCardsRemaining;
+  int get numBlueCardsRemaining;
+
   /// Syncs the state of this game to remote clients.
   ///
   /// Once this future completes, the state of remote instances of this game
@@ -752,6 +764,16 @@ class _GameState extends State<Game> implements GameController {
       _revealed = message.revealed;
       _results = ResultMap.fromValues(message.results);
     });
+  }
+
+  bool _notYetRevealed(MapEntry<Coordinates, Result> entry) {
+    return !_revealed[entry.key.index];
+  }
+
+  bool Function(MapEntry<Coordinates, Result>) _isColor(ResultType type) {
+    return (MapEntry<Coordinates, Result> entry) {
+      return entry.value.type == type;
+    };
   }
 
   @override
@@ -799,6 +821,22 @@ class _GameState extends State<Game> implements GameController {
   }
 
   @override
+  int get numRedCardsRemaining {
+    return _results.map.entries
+        .where(_notYetRevealed)
+        .where(_isColor(ResultType.red))
+        .length;
+  }
+
+  @override
+  int get numBlueCardsRemaining {
+    return _results.map.entries
+        .where(_notYetRevealed)
+        .where(_isColor(ResultType.blue))
+        .length;
+  }
+
+  @override
   Future<void> sync([String? ip]) async {
     final Message message = SyncAppStateMessage(
       _results.values,
@@ -828,6 +866,21 @@ class _GameState extends State<Game> implements GameController {
     newGame();
     NetworkBinding.instance.onRemoteSync = _handleRemoteSync;
     GameBinding.instance.controller = this;
+
+    FocusManager.instance.addListener(() {
+      Element? el;
+      bool _visit(Element parent) {
+        if (parent.widget is Tile || parent.widget is ActionButton) {
+          el = parent;
+          return false;
+        } else {
+          return true;
+        }
+      }
+      debugPrint('${FocusManager.instance.primaryFocus}');
+      FocusManager.instance.primaryFocus?.context?.visitAncestorElements(_visit);
+      debugPrint('$el');
+    });
   }
 
   @override
@@ -845,29 +898,32 @@ class _GameState extends State<Game> implements GameController {
       revealedHash: Object.hashAll(_revealed),
       resultsHash: Object.hashAll(_results.values),
       codegiverMode: _codegiverMode,
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Flexible(
-            child: ColoredBox(
-              color: Color(0xffffffff),
-              child: Padding(
-                padding: EdgeInsets.all(5),
-                child: Board(),
+      child: const FocusScope(
+        autofocus: true,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Flexible(
+              child: ColoredBox(
+                color: Color(0xffffffff),
+                child: Padding(
+                  padding: EdgeInsets.all(5),
+                  child: Board(),
+                ),
               ),
             ),
-          ),
-          SizedBox(
-            width: 75,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border(left: BorderSide(width: 2)),
-                color: Color(0xffffeedd),
+            SizedBox(
+              width: 75,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border(left: BorderSide(width: 2)),
+                  color: Color(0xffffeedd),
+                ),
+                child: ActionBar(),
               ),
-              child: ActionBar(),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -914,22 +970,37 @@ class ActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ActionButton(
-            debugName: 'newGame',
-            icon: Icons.refresh,
-            onPressed: _handleNewGame,
-          ),
-          ActionButton(
-            debugName: 'toggleCodegiver',
-            icon: Icons.all_inclusive,
-            onPressed: _handleToggleCodegiverMode,
-          ),
-        ],
+    final GameController gameController = Game.of(context);
+    return DefaultTextStyle.merge(
+      style: const TextStyle(
+        color: Color(0xffffffff),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ActionButton(
+              debugName: 'newGame',
+              icon: Icons.refresh,
+              onPressed: _handleNewGame,
+            ),
+            ActionButton(
+              debugName: 'toggleCodegiver',
+              icon: Icons.map,
+              onPressed: _handleToggleCodegiverMode,
+            ),
+            Flexible(child: Container()),
+            Scorecard(
+              result: const Red(),
+              score: gameController.numRedCardsRemaining,
+            ),
+            Scorecard(
+              result: const Blue(),
+              score: gameController.numBlueCardsRemaining,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -952,12 +1023,49 @@ class ActionButton extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Focus(
-        onFocusChange: (bool hasFocus) {
-          debugPrint('$debugName has focus ? $hasFocus');
-        },
         child: FloatingActionButton(
           onPressed: onPressed,
           child: Icon(icon),
+        ),
+      ),
+    );
+  }
+
+  @override
+  String toStringShort() {
+    return 'ActionButton-[$debugName]';
+  }
+}
+
+class Scorecard extends StatelessWidget {
+  const Scorecard({
+    super.key,
+    required this.result,
+    required this.score,
+  });
+
+  final Result result;
+  final int score;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Center(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: result.color,
+            shape: BoxShape.circle,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(15),
+            child: Center(
+              child: Text(
+                '$score',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -978,86 +1086,6 @@ class Board extends StatefulWidget {
 class _BoardState extends State<Board> {
   final Map<Coordinates, GlobalKey<TileState>> _tiles = <Coordinates, GlobalKey<TileState>>{};
 
-  // static const double borderRadius = 10;
-  // static const double padding = 5;
-
-  // Iterable<Widget> _getResultPopup() {
-  //   Iterable<Widget> result = const Iterable<Widget>.empty();
-  //   if (_coloring != null) {
-  //     final GlobalKey<TileState> tile = _tiles[_coloring!]!;
-  //     final RenderBox tileRenderBox = tile.currentContext!.findRenderObject() as RenderBox;
-  //     final Offset tileGlobalOffset = tileRenderBox.localToGlobal(Offset.zero, ancestor: context.findRenderObject());
-  //     result = <Widget>[
-  //       Positioned(
-  //         left: tileGlobalOffset.dx,
-  //         top: tileGlobalOffset.dy,
-  //         child: Padding(
-  //           padding: const EdgeInsets.all(padding),
-  //           child: DecoratedBox(
-  //             decoration: BoxDecoration(
-  //               borderRadius: BorderRadius.circular(borderRadius),
-  //             ),
-  //             child: ClipRRect(
-  //               borderRadius: BorderRadius.circular(borderRadius),
-  //               child: SizedBox(
-  //                 width: tileRenderBox.size.width - 2 * padding,
-  //                 height: tileRenderBox.size.height - 2 * padding,
-  //                 child: FocusScope(
-  //                   child: Row(
-  //                     crossAxisAlignment: CrossAxisAlignment.stretch,
-  //                     children: [
-  //                       Flexible(
-  //                         child: Column(
-  //                           crossAxisAlignment: CrossAxisAlignment.stretch,
-  //                           children: [
-  //                             ResultPicker(autofocus: true, coordinates: _coloring!, result: const Assassin()),
-  //                             ResultPicker(coordinates: _coloring!, result: const Neutral()),
-  //                           ],
-  //                         ),
-  //                       ),
-  //                       Flexible(
-  //                         child: Column(
-  //                           crossAxisAlignment: CrossAxisAlignment.stretch,
-  //                           children: [
-  //                             ResultPicker(coordinates: _coloring!, result: const Blue()),
-  //                             ResultPicker(coordinates: _coloring!, result: const Red()),
-  //                           ],
-  //                         ),
-  //                       ),
-  //                     ],
-  //                   ),
-  //                 ),
-  //               ),
-  //             ),
-  //           ),
-  //         ),
-  //       ),
-  //     ];
-  //   }
-  //   return result;
-  // }
-
-  // void _cancelResultsPopup() {
-  //   coloring = null;
-  // }
-
-  // @override
-  // set coloring(Coordinates? coordinates) {
-  //   setState(() {
-  //     _coloring = coordinates;
-  //   });
-  // }
-
-  // @override
-  // set result(Result result) {
-  //   assert(_coloring != null);
-  //   setState(() {
-  //     _results[_coloring!] = result;
-  //     _coloring = null;
-  //   });
-  //   sync();
-  // }
-
   @override
   void initState() {
     super.initState();
@@ -1069,61 +1097,26 @@ class _BoardState extends State<Board> {
 
   @override
   Widget build(BuildContext context) {
-    return FocusScope(
-      autofocus: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: List<Widget>.generate(Board.ySize, (int i) {
-          return Flexible(
-            flex: 1,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: List<Widget>.generate(Board.xSize, (int j) {
-                final Coordinates coordinates = (i, j);
-                return Tile(
-                  key: _tiles[coordinates],
-                  coordinates: coordinates,
-                );
-              }),
-            ),
-          );
-        }),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: List<Widget>.generate(Board.ySize, (int i) {
+        return Flexible(
+          flex: 1,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: List<Widget>.generate(Board.xSize, (int j) {
+              final Coordinates coordinates = (i, j);
+              return Tile(
+                key: _tiles[coordinates],
+                coordinates: coordinates,
+              );
+            }),
+          ),
+        );
+      }),
     );
   }
 }
-
-// class ResultPicker extends StatelessWidget {
-//   const ResultPicker({
-//     super.key,
-//     this.autofocus = false,
-//     required this.coordinates,
-//     required this.result,
-//   });
-
-//   final bool autofocus;
-//   final Coordinates coordinates;
-//   final Result result;
-
-//   void _handleSelect(BuildContext context) {
-//     Board.of(context).result = result;
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Flexible(
-//       child: Focus(
-//         autofocus: autofocus,
-//         child: SizedBox.expand(
-//           child: GestureDetector(
-//             onTap: () => _handleSelect(context),
-//             child: result.build(),
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
 
 class Tile extends StatefulWidget {
   const Tile({
@@ -1141,16 +1134,23 @@ class TileState extends State<Tile> {
   bool _hasFocus = false;
   late FocusNode _focusNode;
 
-  void _handleToggleRevealed() {
+  void _handleTap() {
+    _toggleRevealed();
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  void _toggleRevealed() {
     GameController controller = Game.of(context);
     controller.toggleRevealed(widget.coordinates);
     controller.sync();
-    _focusNode.unfocus();
   }
 
   void _handleFocusChanged(bool hasFocus) {
     setState(() {
       _hasFocus = hasFocus;
+      if (hasFocus) {
+        SystemSound.play(SystemSoundType.click);
+      }
     });
   }
 
@@ -1158,7 +1158,7 @@ class TileState extends State<Tile> {
     KeyEventResult result = KeyEventResult.ignored;
     if (event is KeyDownEvent) {
       if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.select) {
-        _handleToggleRevealed();
+        _toggleRevealed();
         result = KeyEventResult.handled;
       }
     }
@@ -1211,7 +1211,7 @@ class TileState extends State<Tile> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: GestureDetector(
-                      onTap: _handleToggleRevealed,
+                      onTap: _handleTap,
                       child: Stack(
                         fit: StackFit.passthrough,
                         children: [
@@ -1300,7 +1300,7 @@ class ResultMap {
     final List<Result> values = List<Result>.from(_seedValues)
         ..add(this.firstMove)
         ..shuffle(random);
-    _results = values.asCoordinatesMap();
+    map = values.asCoordinatesMap();
   }
 
   ResultMap.fromValues(List<int> values) {
@@ -1310,7 +1310,7 @@ class ResultMap {
     assert(values.where((int value) => value == ResultType.neutral.index).length == 7);
     assert(values.where((int value) => value == ResultType.red.index).length >= 8);
     assert(values.where((int value) => value == ResultType.blue.index).length >= 8);
-    _results = values.map<Result>((int value) => Result.fromValue(value)).asCoordinatesMap();
+    map = values.map<Result>((int value) => Result.fromValue(value)).asCoordinatesMap();
     if (values.where((int value) => value == ResultType.red.index).length == 9) {
       firstMove = const Red();
     } else {
@@ -1319,7 +1319,7 @@ class ResultMap {
   }
 
   late final Result firstMove;
-  late final Map<Coordinates, Result> _results;
+  late final Map<Coordinates, Result> map;
 
   static const List<Result> _seedValues = <Result>[
     Assassin(), Neutral(), Neutral(), Neutral(), Neutral(), Neutral(), Neutral(), Neutral(),
@@ -1331,10 +1331,10 @@ class ResultMap {
     return random.nextBool() ? const Red() : const Blue();
   }
 
-  Result operator[](Coordinates coordinates) => _results[coordinates]!;
+  Result operator[](Coordinates coordinates) => map[coordinates]!;
 
   List<int> get values {
-    return _results.asIndexedList()
+    return map.asIndexedList()
         .map<int>((Result result) => result.type.index)
         .toList();
   }
