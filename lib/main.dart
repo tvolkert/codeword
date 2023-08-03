@@ -297,18 +297,26 @@ class Server {
 
   SyncAppStateCallback? onRemoteSync;
 
-  Future<void> start() async {
-    if (_socket == null) {
+  Future<bool> start() async {
+    if (isStopped) {
       assert(_remoteClientListener == null);
-      final ServerSocket socket = await ServerSocket.bind(ip, port);
-      _socket = socket;
-      _remoteClientListener = socket.listen(_handleNewRemoteClient, onError: _handleError);
+      try {
+        _socket = await ServerSocket.bind(ip, port);
+      } on SocketException catch (error) {
+        if (error.toString().contains('already in use')) {
+          return false;
+        } else {
+          rethrow;
+        }
+      }
+      _remoteClientListener = _socket!.listen(_handleNewRemoteClient, onError: _handleError);
       debugPrint('Server listening on $ip:$port');
     }
+    return true;
   }
 
   Future<void> stop() async {
-    if (_socket != null) {
+    if (isStarted) {
       assert(_remoteClientListener != null);
       await _remoteClientListener!.cancel();
       _remoteClientListener = null;
@@ -320,6 +328,10 @@ class Server {
       _remoteClients.clear();
     }
   }
+
+  bool get isStarted => _socket != null;
+
+  bool get isStopped => _socket == null;
 
   void _handleNewRemoteClient(Socket socket) async {
     final String ip = socket.remoteAddress.address;
@@ -564,7 +576,11 @@ void main() {
     () async {
       runApp(const LoadingScreen());
       await AppBinding.ensureInitialized();
-      runApp(const CodewordApp());
+      if (NetworkBinding.instance.localServer.isStarted) {
+        runApp(const CodewordApp());
+      } else {
+        runApp(const DuplicateAppInstanceErrorScreen());
+      }
     },
     (Object error, StackTrace stack) {
       debugPrint('Caught unhandled error by zone error handler.');
@@ -583,6 +599,36 @@ class LoadingScreen extends StatelessWidget {
         color: Color(0xffffffff),
         child: Center(
           child: CircularProgressIndicator(),
+        ),
+      ),
+    );
+  }
+}
+
+class DuplicateAppInstanceErrorScreen extends StatelessWidget {
+  const DuplicateAppInstanceErrorScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ColoredBox(
+        color: const Color(0xffffffff),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Padding(
+            padding: const EdgeInsets.all(100),
+            child: Center(
+              child: Text(
+                'There appears to be another Codeword app already running on '
+                'this machine. Only one Codeword app can be running at a time.',
+                textAlign: TextAlign.center,
+                style: DefaultTextStyle.of(context).style.copyWith(
+                  color: const Color(0xff000000),
+                  fontSize: 24,
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
