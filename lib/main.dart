@@ -9,7 +9,7 @@ import 'package:flutter/material.dart' show CircularProgressIndicator, FloatingA
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import 'package:network_info_plus/network_info_plus.dart';
+import 'package:network_info_plus/network_info_plus.dart' as nip;
 
 typedef Coordinates = (int, int);
 typedef CardValue = int;
@@ -190,6 +190,61 @@ class ClassicTheme implements Theme {
   int get length => _population.length;
 }
 
+class NoNetworkError extends Error {
+  NoNetworkError(this.message);
+
+  final String message;
+}
+
+class NetworkInfo {
+  const NetworkInfo();
+
+  static const MethodChannel _channel = MethodChannel('codeword.tvolkert.dev/network');
+
+  Future<List<String>> getAddresses() async {
+    List<String>? addresses;
+    try {
+      addresses = await _channel.invokeListMethod<String>('getAddresses');
+      debugPrint('channel returned addresses: $addresses');
+    } on PlatformException catch (error) {
+      if (error.code == 'no_network') {
+        throw NoNetworkError('Not connected to network');
+      } else {
+        rethrow;
+      }
+    } on MissingPluginException {
+      debugPrint('No platform implementation for getAddresses(); falling back to network_info_plus');
+      addresses = await _fallbackGetAddresses();
+    }
+    assert(addresses != null);
+    assert(() {
+      final RegExp pattern = RegExp(r'^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]+$');
+      assert(addresses!.every(pattern.hasMatch));
+      return true;
+    }());
+    return addresses!;
+  }
+
+  Future<List<String>> _fallbackGetAddresses() async {
+    final nip.NetworkInfo net = nip.NetworkInfo();
+    final String? ip = await net.getWifiIP();
+    if (ip == null) {
+      throw NoNetworkError('Not connected to wifi network');
+    }
+    final String? subnetMask = await net.getWifiSubmask();
+    assert(subnetMask != null);
+    final int subnetValue = Ip.fromDisplayValue(subnetMask!).value;
+    final String subnetBinary = subnetValue.toRadixString(2);
+    assert(() {
+      final RegExp pattern = RegExp(r'^1*0*$');
+      assert(pattern.hasMatch(subnetBinary));
+      return true;
+    }());
+    final int prefixLength = subnetBinary.replaceAll('0', '').length;
+    return <String>['$ip/$prefixLength'];
+  }
+}
+
 enum MessageType {
   newAppInstance,
   syncAppState,
@@ -279,7 +334,7 @@ class SyncAppStateMessage extends Message {
   
   @override
   void receive() {
-    NetworkBinding.instance.onRemoteSync?.call(this);
+    NetworkBinding.instance.localServer?.onRemoteSync?.call(this);
   }
 }
 
@@ -465,19 +520,14 @@ mixin NetworkBinding on AppBindingBase {
   late String _subnetMask;
   String get subnetMask => _subnetMask;
 
-  late Server _localServer;
-  Server get localServer => _localServer;
+  Server? _localServer;
+  Server? get localServer => _localServer;
 
   late LocalClient _localClient;
   LocalClient get localClient => _localClient;
 
   late LocalNetwork _localNetwork;
   LocalNetwork get localNetwork => _localNetwork;
-
-  SyncAppStateCallback? get onRemoteSync => localServer.onRemoteSync;
-  set onRemoteSync(SyncAppStateCallback? callback) {
-    localServer.onRemoteSync = callback;
-  }
 
   @override
   @protected
@@ -486,14 +536,30 @@ mixin NetworkBinding on AppBindingBase {
     await super.initInstances();
     _instance = this;
 
-    final NetworkInfo net = NetworkInfo();
-    _ip = (await net.getWifiIP()) ?? '192.168.86.34';
-    _subnetMask = (await net.getWifiSubmask()) ?? '255.255.255.0';
-    if (_subnetMask.isEmpty) _subnetMask = '255.255.255.0'; // TODO: this is a hack
+    try {
+      List<String> addresses = await const NetworkInfo().getAddresses();
+      if (addresses.isEmpty) {
+        debugPrint('No address found for local network');
+        return;
+      }
+
+      final String address = addresses.first;
+      if (addresses.length > 1) {
+        debugPrint('Found more than one IPv4 address; chose first one. The list was:');
+        for (String value in addresses) {
+          debugPrint(' - $value');
+        }
+      }
+      _ip = address.split('/').first;
+      _subnetMask = Ip.fromPrefixLength(int.parse(address.split('/').last)).displayValue;
+    } on NoNetworkError {
+      debugPrint('No network connection');
+      return;
+    }
 
     _localServer = Server(ip: ip);
     _localClient = LocalClient();
-    await localServer.start();
+    await localServer!.start();
 
     _localNetwork = LocalNetwork(ip, subnetMask);
     debugPrint('Local network is deviceIp="$ip", subnetMask="$subnetMask"');
@@ -576,10 +642,17 @@ void main() {
     () async {
       runApp(const LoadingScreen());
       await AppBinding.ensureInitialized();
-      if (NetworkBinding.instance.localServer.isStarted) {
-        runApp(const CodewordApp());
+      if (NetworkBinding.instance.localServer == null) {
+        runApp(const ErrorScreen(
+          'This machine appears to be disconnected from the local network.'
+        ));
+      } else if (NetworkBinding.instance.localServer!.isStopped) {
+        runApp(const ErrorScreen(
+          'There appears to be another Codeword app already running on '
+          'this machine. Only one Codeword app can be running at a time.'
+        ));
       } else {
-        runApp(const DuplicateAppInstanceErrorScreen());
+        runApp(const CodewordApp());
       }
     },
     (Object error, StackTrace stack) {
@@ -605,8 +678,10 @@ class LoadingScreen extends StatelessWidget {
   }
 }
 
-class DuplicateAppInstanceErrorScreen extends StatelessWidget {
-  const DuplicateAppInstanceErrorScreen({super.key});
+class ErrorScreen extends StatelessWidget {
+  const ErrorScreen(this.errorMessage, {super.key});
+
+  final String errorMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -619,8 +694,7 @@ class DuplicateAppInstanceErrorScreen extends StatelessWidget {
             padding: const EdgeInsets.all(100),
             child: Center(
               child: Text(
-                'There appears to be another Codeword app already running on '
-                'this machine. Only one Codeword app can be running at a time.',
+                errorMessage,
                 textAlign: TextAlign.center,
                 style: DefaultTextStyle.of(context).style.copyWith(
                   color: const Color(0xff000000),
@@ -659,7 +733,7 @@ class LocalNetwork {
       return const <int>[0];
     }
     final Iterable<int> baseValues = _getPossibleSubnetValuesRecur(subnetValue, pos - 1);
-    final int mask = (subnetValue >> (pos - 1)) & 0x1;
+    final int mask = (subnetValue >>> (pos - 1)) & 0x1;
     if (mask > 0) {
       return baseValues.followedBy(baseValues.map<int>((int baseValue) {
         return (mask << (pos - 1)) | baseValue;
@@ -675,14 +749,25 @@ class Ip {
 
   Ip.fromValue(this._value);
 
+  factory Ip.fromPrefixLength(int length) {
+    assert(length >= 16 && length <= 32);
+    int value = 0;
+    int mask = 1 << 31;
+    for (int i = 0; i < length; i++) {
+      value |= mask;
+      mask = mask >>> 1;
+    }
+    return Ip.fromValue(value);
+  }
+
   String? _displayValue;
   String get displayValue {
     if (_displayValue == null) {
       assert(_value != null);
       List<int> parts = <int>[
-        (_value! >> 24) & 0x000000ff,
-        (_value! >> 16) & 0x000000ff,
-        (_value! >> 8) & 0x000000ff,
+        (_value! >>> 24) & 0x000000ff,
+        (_value! >>> 16) & 0x000000ff,
+        (_value! >>> 8) & 0x000000ff,
         _value! & 0x000000ff,
       ];
       _debugAssertParts(parts);
@@ -735,6 +820,10 @@ class CodewordApp extends StatelessWidget {
         color: const Color(0xff000000),
         fontSize: 24,
       ),
+      shortcuts: <ShortcutActivator, Intent>{
+        ... WidgetsApp.defaultShortcuts,
+        const SingleActivator(LogicalKeyboardKey.select): const ActivateIntent(),
+      },
       builder: (BuildContext context, Widget? widget) {
         return const SafeArea(
           child: Game(),
@@ -910,14 +999,14 @@ class _GameState extends State<Game> implements GameController {
     super.initState();
     _usedValues = <CardValue>[];
     newGame();
-    NetworkBinding.instance.onRemoteSync = _handleRemoteSync;
+    NetworkBinding.instance.localServer?.onRemoteSync = _handleRemoteSync;
     GameBinding.instance.controller = this;
   }
 
   @override
   void dispose() {
     GameBinding.instance.controller = null;
-    NetworkBinding.instance.onRemoteSync = null;
+    NetworkBinding.instance.localServer?.onRemoteSync = null;
     super.dispose();
   }
 
