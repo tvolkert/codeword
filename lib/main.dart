@@ -912,21 +912,6 @@ class _GameState extends State<Game> implements GameController {
     newGame();
     NetworkBinding.instance.onRemoteSync = _handleRemoteSync;
     GameBinding.instance.controller = this;
-
-    FocusManager.instance.addListener(() {
-      Element? el;
-      bool _visit(Element parent) {
-        if (parent.widget is Tile || parent.widget is ActionButton) {
-          el = parent;
-          return false;
-        } else {
-          return true;
-        }
-      }
-      debugPrint('${FocusManager.instance.primaryFocus}');
-      FocusManager.instance.primaryFocus?.context?.visitAncestorElements(_visit);
-      debugPrint('$el');
-    });
   }
 
   @override
@@ -1068,11 +1053,9 @@ class ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Focus(
-        child: FloatingActionButton(
-          onPressed: onPressed,
-          child: Icon(icon),
-        ),
+      child: FloatingActionButton(
+        onPressed: onPressed,
+        child: Icon(icon),
       ),
     );
   }
