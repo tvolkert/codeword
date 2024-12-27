@@ -1,19 +1,24 @@
 package dev.tvolkert.codeword
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.LinkProperties
+import android.net.Network
+
+import java.util.ArrayList
+import kotlin.collections.MutableList
+
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodCall
+import io.flutter.plugin.common.MethodChannel
 
 class NetworkChannel internal constructor(
-    @NonNull flutterEngine: FlutterEngine,
-    @NonNull applicationContext: Context
+    private val flutterEngine: FlutterEngine,
+    applicationContext: Context
 ) {
-    @NonNull
-    private val flutterEngine: FlutterEngine = flutterEngine
-
-    @NonNull
     private val connectivityManager: ConnectivityManager =
         applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-    @Nullable
     private var channel: MethodChannel? = null
 
     fun register() {
@@ -22,8 +27,9 @@ class NetworkChannel internal constructor(
             return
         }
 
-        channel = MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), CHANNEL_NAME)
-        channel.setMethodCallHandler { methodCall: MethodCall, result: MethodChannel.Result ->
+        val localChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_NAME)
+        channel = localChannel
+        localChannel.setMethodCallHandler { methodCall: MethodCall, result: MethodChannel.Result ->
             when (methodCall.method) {
                 METHOD_NAME_GET_ADDRESSES -> getAddresses(result)
                 else -> result.notImplemented()
@@ -32,26 +38,24 @@ class NetworkChannel internal constructor(
     }
 
     private fun getAddresses(result: MethodChannel.Result) {
-        val data: List<String> = ArrayList<String>()
+        val data: MutableList<String> = ArrayList<String>()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            @Nullable val network: Network = connectivityManager.getActiveNetwork()
+            val network: Network? = connectivityManager.activeNetwork
             if (network == null) {
                 result.error(ERROR_CODE_NO_NETWORK, null, null)
             }
 
-            @Nullable val linkProperties: LinkProperties =
-                connectivityManager.getLinkProperties(network)
+            val linkProperties: LinkProperties? = connectivityManager.getLinkProperties(network)
             if (linkProperties == null) {
                 result.error(ERROR_CODE_NO_NETWORK, null, null)
             }
 
             checkNotNull(linkProperties)
-            val linkAddresses: List<LinkAddress> = linkProperties.getLinkAddresses()
-            for (linkAddress in linkAddresses) {
-                if (linkAddress.getAddress().getAddress().length === 4) {
+            for (linkAddress in linkProperties.linkAddresses) {
+                if (linkAddress.address.address.size == 4) {
                     // IPv4 address.
-                    val address: String = linkAddress.getAddress().getHostAddress()
-                    val prefixLength: Int = linkAddress.getPrefixLength()
+                    val address: String = linkAddress.address.hostAddress!!
+                    val prefixLength: Int = linkAddress.prefixLength
                     data.add("$address/$prefixLength")
                 }
             }
@@ -62,7 +66,6 @@ class NetworkChannel internal constructor(
     }
 
     companion object {
-        private const val TAG = "flutter"
         private const val CHANNEL_NAME = "codeword.tvolkert.dev/network"
         private const val METHOD_NAME_GET_ADDRESSES = "getAddresses"
         const val ERROR_CODE_NO_NETWORK: String = "no_network"
