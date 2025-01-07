@@ -8,7 +8,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show CircularProgressIndicator, FloatingActionButton, Icons;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-
 import 'package:network_info_plus/network_info_plus.dart' as nip;
 
 typedef Coordinates = (int, int);
@@ -117,54 +116,60 @@ class ClassicTheme implements Theme {
   const ClassicTheme();
 
   static const List<String> _population = <String>[
-    'Africa', 'Agent', 'Air', 'Alien', 'Alps', 'Amazon', 'Ambulance', 'America',
-    'Angel', 'Antarctica', 'Apple', 'Arm', 'Atlantis', 'Australia', 'Aztec', 'Back',
-    'Ball', 'Band', 'Bank', 'Bar', 'Bark', 'Bat', 'Battery', 'Beach', 'Bear',
-    'Beat', 'Bed', 'Beijing', 'Bell', 'Belt', 'Berlin', 'Bermuda', 'Berry', 'Bill',
-    'Block', 'Board', 'Bolt', 'Bomb', 'Bond', 'Boom', 'Boot', 'Bottle', 'Bow',
-    'Box', 'Bridge', 'Brush', 'Buck', 'Buffalo', 'Bug', 'Bugle', 'Button', 'Calf',
-    'Canada', 'Cap', 'Capital', 'Car', 'Card', 'Carrot', 'Casino', 'Cast', 'Cat',
-    'Cell', 'Centaur', 'Center', 'Chair', 'Change', 'Charge', 'Check', 'Chest',
-    'Chick', 'China', 'Chocolate', 'Church', 'Circle', 'Cliff', 'Cloak', 'Club',
-    'Code', 'Cold', 'Comic', 'Compound', 'Concert', 'Conductor', 'Contract', 'Cook',
-    'Copper', 'Cotton', 'Court', 'Cover', 'Crane', 'Crash', 'Cricket', 'Cross',
-    'Crown', 'Cycle', 'Czech', 'Dance', 'Date', 'Day', 'Death', 'Deck', 'Degree',
-    'Diamond', 'Dice', 'Dinosaur', 'Disease', 'Doctor', 'Dog', 'Draft', 'Dragon',
-    'Dress', 'Drill', 'Drop', 'Duck', 'Dwarf', 'Eagle', 'Egypt', 'Embassy',
-    'Engine', 'England', 'Europe', 'Eye', 'Face', 'Fair', 'Fall', 'Fan', 'Fence',
-    'Field', 'Fighter', 'Figure', 'File', 'Film', 'Fire', 'Fish', 'Flute', 'Fly',
-    'Foot', 'Force', 'Forest', 'Fork', 'France', 'Game', 'Gas', 'Genius', 'Germany',
-    'Ghost', 'Giant', 'Glass', 'Glove', 'Gold', 'Grace', 'Grass', 'Greece', 'Green',
-    'Ground', 'Ham', 'Hand', 'Hawk', 'Head', 'Heart', 'Helicopter', 'Himalayas',
-    'Hole', 'Hollywood', 'Honey', 'Hood', 'Hook', 'Horn', 'Horse', 'Horseshoe',
-    'Hospital', 'Hotel', 'Ice', 'Ice cream', 'India', 'Iron', 'Ivory', 'Jack',
-    'Jam', 'Jet', 'Jupiter', 'Kangaroo', 'Ketchup', 'Key', 'Kid', 'King', 'Kiwi',
-    'Knife', 'Knight', 'Lab', 'Lap', 'Laser', 'Lawyer', 'Lead', 'Lemon',
-    'Leprechaun', 'Life', 'Light', 'Limousine', 'Line', 'Link', 'Lion', 'Litter',
-    'Loch ness', 'Lock', 'Log', 'London', 'Luck', 'Mail', 'Mammoth', 'Maple',
-    'Marble', 'March', 'Mass', 'Match', 'Mercury', 'Mexico', 'Microscope',
-    'Millionaire', 'Mine', 'Mint', 'Missile', 'Model', 'Mole', 'Moon', 'Moscow',
-    'Mount', 'Mouse', 'Mouth', 'Mug', 'Nail', 'Needle', 'Net', 'New york', 'Night',
-    'Ninja', 'Note', 'Novel', 'Nurse', 'Nut', 'Octopus', 'Oil', 'Olive', 'Olympus',
-    'Opera', 'Orange', 'Organ', 'Palm', 'Pan', 'Pants', 'Paper', 'Parachute',
-    'Park', 'Part', 'Pass', 'Paste', 'Penguin', 'Phoenix', 'Piano', 'Pie', 'Pilot',
-    'Pin', 'Pipe', 'Pirate', 'Pistol', 'Pit', 'Pitch', 'Plane', 'Plastic', 'Plate',
-    'Platypus', 'Play', 'Plot', 'Point', 'Poison', 'Pole', 'Police', 'Pool', 'Port',
-    'Post', 'Pound', 'Press', 'Princess', 'Pumpkin', 'Pupil', 'Pyramid', 'Queen',
-    'Rabbit', 'Racket', 'Ray', 'Revolution', 'Ring', 'Robin', 'Robot', 'Rock',
-    'Rome', 'Root', 'Rose', 'Roulette', 'Round', 'Row', 'Ruler', 'Satellite',
-    'Saturn', 'Scale', 'School', 'Scientist', 'Scorpion', 'Screen', 'Scuba diver',
-    'Seal', 'Server', 'Shadow', 'Shakespeare', 'Shark', 'Ship', 'Shoe', 'Shop',
-    'Shot', 'Sink', 'Skyscraper', 'Slip', 'Slug', 'Smuggler', 'Snow', 'Snowman',
-    'Sock', 'Soldier', 'Soul', 'Sound', 'Space', 'Spell', 'Spider', 'Spike',
-    'Spine', 'Spot', 'Spring', 'Spy', 'Square', 'Stadium', 'Staff', 'Star', 'State',
-    'Stick', 'Stock', 'Straw', 'Stream', 'Strike', 'String', 'Sub', 'Suit',
-    'Superhero', 'Swing', 'Switch', 'Table', 'Tablet', 'Tag', 'Tail', 'Tap',
-    'Teacher', 'Telescope', 'Temple', 'Theater', 'Thief', 'Thumb', 'Tick', 'Tie',
-    'Time', 'Tokyo', 'Tooth', 'Torch', 'Tower', 'Track', 'Train', 'Triangle',
-    'Trip', 'Trunk', 'Tube', 'Turkey', 'Undertaker', 'Unicorn', 'Vacuum', 'Van',
-    'Vet', 'Wake', 'Wall', 'War', 'Washer', 'Washington', 'Watch', 'Water', 'Wave',
-    'Web', 'Well', 'Whale', 'Whip', 'Wind', 'Witch', 'Worm', 'Yard',
+    'Africa', 'Agent', 'Air', 'Alien', 'Alps', 'Amazon', 'Ambulance', //
+    'America', 'Angel', 'Antarctica', 'Apple', 'Arm', 'Atlantis', //
+    'Australia', 'Aztec', 'Back', 'Ball', 'Band', 'Bank', 'Bar', 'Bark', //
+    'Bat', 'Battery', 'Beach', 'Bear', 'Beat', 'Bed', 'Beijing', 'Bell', //
+    'Belt', 'Berlin', 'Bermuda', 'Berry', 'Bill', 'Block', 'Board', 'Bolt', //
+    'Bomb', 'Bond', 'Boom', 'Boot', 'Bottle', 'Bow', 'Box', 'Bridge', //
+    'Brush', 'Buck', 'Buffalo', 'Bug', 'Bugle', 'Button', 'Calf', 'Canada', //
+    'Cap', 'Capital', 'Car', 'Card', 'Carrot', 'Casino', 'Cast', 'Cat', //
+    'Cell', 'Centaur', 'Center', 'Chair', 'Change', 'Charge', 'Check', //
+    'Chest', 'Chick', 'China', 'Chocolate', 'Church', 'Circle', 'Cliff', //
+    'Cloak', 'Club', 'Code', 'Cold', 'Comic', 'Compound', 'Concert', //
+    'Conductor', 'Contract', 'Cook', 'Copper', 'Cotton', 'Court', 'Cover', //
+    'Crane', 'Crash', 'Cricket', 'Cross', 'Crown', 'Cycle', 'Czech', 'Dance', //
+    'Date', 'Day', 'Death', 'Deck', 'Degree', 'Diamond', 'Dice', 'Dinosaur', //
+    'Disease', 'Doctor', 'Dog', 'Draft', 'Dragon', 'Dress', 'Drill', 'Drop', //
+    'Duck', 'Dwarf', 'Eagle', 'Egypt', 'Embassy', 'Engine', 'England', //
+    'Europe', 'Eye', 'Face', 'Fair', 'Fall', 'Fan', 'Fence', 'Field', //
+    'Fighter', 'Figure', 'File', 'Film', 'Fire', 'Fish', 'Flute', 'Fly', //
+    'Foot', 'Force', 'Forest', 'Fork', 'France', 'Game', 'Gas', 'Genius', //
+    'Germany', 'Ghost', 'Giant', 'Glass', 'Glove', 'Gold', 'Grace', 'Grass', //
+    'Greece', 'Green', 'Ground', 'Ham', 'Hand', 'Hawk', 'Head', 'Heart', //
+    'Helicopter', 'Himalayas', 'Hole', 'Hollywood', 'Honey', 'Hood', 'Hook', //
+    'Horn', 'Horse', 'Horseshoe', 'Hospital', 'Hotel', 'Ice', 'Ice cream', //
+    'India', 'Iron', 'Ivory', 'Jack', 'Jam', 'Jet', 'Jupiter', 'Kangaroo', //
+    'Ketchup', 'Key', 'Kid', 'King', 'Kiwi', 'Knife', 'Knight', 'Lab', 'Lap', //
+    'Laser', 'Lawyer', 'Lead', 'Lemon', 'Leprechaun', 'Life', 'Light', //
+    'Limousine', 'Line', 'Link', 'Lion', 'Litter', 'Loch ness', 'Lock', //
+    'Log', 'London', 'Luck', 'Mail', 'Mammoth', 'Maple', 'Marble', 'March', //
+    'Mass', 'Match', 'Mercury', 'Mexico', 'Microscope', 'Millionaire', //
+    'Mine', 'Mint', 'Missile', 'Model', 'Mole', 'Moon', 'Moscow', 'Mount', //
+    'Mouse', 'Mouth', 'Mug', 'Nail', 'Needle', 'Net', 'New york', 'Night', //
+    'Ninja', 'Note', 'Novel', 'Nurse', 'Nut', 'Octopus', 'Oil', 'Olive', //
+    'Olympus', 'Opera', 'Orange', 'Organ', 'Palm', 'Pan', 'Pants', 'Paper', //
+    'Parachute', 'Park', 'Part', 'Pass', 'Paste', 'Penguin', 'Phoenix', //
+    'Piano', 'Pie', 'Pilot', 'Pin', 'Pipe', 'Pirate', 'Pistol', 'Pit', //
+    'Pitch', 'Plane', 'Plastic', 'Plate', 'Platypus', 'Play', 'Plot', //
+    'Point', 'Poison', 'Pole', 'Police', 'Pool', 'Port', 'Post', 'Pound', //
+    'Press', 'Princess', 'Pumpkin', 'Pupil', 'Pyramid', 'Queen', 'Rabbit', //
+    'Racket', 'Ray', 'Revolution', 'Ring', 'Robin', 'Robot', 'Rock', 'Rome', //
+    'Root', 'Rose', 'Roulette', 'Round', 'Row', 'Ruler', 'Satellite', //
+    'Saturn', 'Scale', 'School', 'Scientist', 'Scorpion', 'Screen', //
+    'Scuba diver', 'Seal', 'Server', 'Shadow', 'Shakespeare', 'Shark', //
+    'Ship', 'Shoe', 'Shop', 'Shot', 'Sink', 'Skyscraper', 'Slip', 'Slug', //
+    'Smuggler', 'Snow', 'Snowman', 'Sock', 'Soldier', 'Soul', 'Sound', //
+    'Space', 'Spell', 'Spider', 'Spike', 'Spine', 'Spot', 'Spring', 'Spy', //
+    'Square', 'Stadium', 'Staff', 'Star', 'State', 'Stick', 'Stock', 'Straw', //
+    'Stream', 'Strike', 'String', 'Sub', 'Suit', 'Superhero', 'Swing', //
+    'Switch', 'Table', 'Tablet', 'Tag', 'Tail', 'Tap', 'Teacher', //
+    'Telescope', 'Temple', 'Theater', 'Thief', 'Thumb', 'Tick', 'Tie', //
+    'Time', 'Tokyo', 'Tooth', 'Torch', 'Tower', 'Track', 'Train', 'Triangle', //
+    'Trip', 'Trunk', 'Tube', 'Turkey', 'Undertaker', 'Unicorn', 'Vacuum', //
+    'Van', 'Vet', 'Wake', 'Wall', 'War', 'Washer', 'Washington', 'Watch', //
+    'Water', 'Wave', 'Web', 'Well', 'Whale', 'Whip', 'Wind', 'Witch', 'Worm', //
+    'Yard', //
   ];
 
   @override
@@ -301,7 +306,8 @@ class NewAppInstanceMessage extends Message {
 }
 
 class SyncAppStateMessage extends Message {
-  const SyncAppStateMessage(this.results, this.values, this.usedValues, this.revealed) : super(MessageType.syncAppState);
+  const SyncAppStateMessage(this.results, this.values, this.usedValues, this.revealed)
+      : super(MessageType.syncAppState);
 
   final List<int> results;
   final List<int> values;
@@ -331,7 +337,7 @@ class SyncAppStateMessage extends Message {
       _keyRevealed: revealed.map<int>((bool value) => value.toInt()).toList(),
     };
   }
-  
+
   @override
   void receive() {
     NetworkBinding.instance.localServer?.onRemoteSync?.call(this);
@@ -643,14 +649,10 @@ void main() {
       runApp(const LoadingScreen());
       await AppBinding.ensureInitialized();
       if (NetworkBinding.instance.localServer == null) {
-        runApp(const ErrorScreen(
-          'This machine appears to be disconnected from the local network.'
-        ));
+        runApp(const ErrorScreen('This machine appears to be disconnected from the local network.'));
       } else if (NetworkBinding.instance.localServer!.isStopped) {
-        runApp(const ErrorScreen(
-          'There appears to be another Codeword app already running on '
-          'this machine. Only one Codeword app can be running at a time.'
-        ));
+        runApp(const ErrorScreen('There appears to be another Codeword app already running on '
+            'this machine. Only one Codeword app can be running at a time.'));
       } else {
         runApp(const CodewordApp());
       }
@@ -697,9 +699,9 @@ class ErrorScreen extends StatelessWidget {
                 errorMessage,
                 textAlign: TextAlign.center,
                 style: DefaultTextStyle.of(context).style.copyWith(
-                  color: const Color(0xff000000),
-                  fontSize: 24,
-                ),
+                      color: const Color(0xff000000),
+                      fontSize: 24,
+                    ),
               ),
             ),
           ),
@@ -710,9 +712,9 @@ class ErrorScreen extends StatelessWidget {
 }
 
 class LocalNetwork {
-  LocalNetwork(String deviceIp, String subnetMask) :
-      deviceIp = Ip.fromDisplayValue(deviceIp),
-      subnetMask = Ip.fromDisplayValue(subnetMask);
+  LocalNetwork(String deviceIp, String subnetMask)
+      : deviceIp = Ip.fromDisplayValue(deviceIp),
+        subnetMask = Ip.fromDisplayValue(subnetMask);
 
   final Ip deviceIp;
   final Ip subnetMask;
@@ -780,14 +782,12 @@ class Ip {
   int get value {
     if (_value == null) {
       assert(_displayValue != null);
-      List<int> parts = _displayValue!
-          .split('.')
-          .map<int>((String chunk) => int.parse(chunk)).toList();
+      List<int> parts = _displayValue!.split('.').map<int>((String chunk) => int.parse(chunk)).toList();
       _debugAssertParts(parts);
-      _value = (parts[3] & 0x000000ff)
-          | ((parts[2] << 8) & 0x0000ff00)
-          | ((parts[1] << 16) & 0x00ff0000)
-          | ((parts[0] << 24) & 0xff000000);
+      _value = (parts[3] & 0x000000ff) |
+          ((parts[2] << 8) & 0x0000ff00) |
+          ((parts[1] << 16) & 0x00ff0000) |
+          ((parts[0] << 24) & 0xff000000);
     }
     return _value!;
   }
@@ -800,7 +800,7 @@ class Ip {
   bool operator ==(Object other) {
     return other is Ip && value == other.value;
   }
-  
+
   @override
   int get hashCode => value.hashCode;
 
@@ -817,11 +817,11 @@ class CodewordApp extends StatelessWidget {
       title: 'Codeword',
       color: const Color(0xffd25f4b),
       textStyle: DefaultTextStyle.of(context).style.copyWith(
-        color: const Color(0xff000000),
-        fontSize: 24,
-      ),
+            color: const Color(0xff000000),
+            fontSize: 24,
+          ),
       shortcuts: <ShortcutActivator, Intent>{
-        ... WidgetsApp.defaultShortcuts,
+        ...WidgetsApp.defaultShortcuts,
         const SingleActivator(LogicalKeyboardKey.select): const ActivateIntent(),
       },
       builder: (BuildContext context, Widget? widget) {
@@ -957,18 +957,12 @@ class _GameState extends State<Game> implements GameController {
 
   @override
   int get numRedCardsRemaining {
-    return _results.map.entries
-        .where(_notYetRevealed)
-        .where(_isColor(ResultType.red))
-        .length;
+    return _results.map.entries.where(_notYetRevealed).where(_isColor(ResultType.red)).length;
   }
 
   @override
   int get numBlueCardsRemaining {
-    return _results.map.entries
-        .where(_notYetRevealed)
-        .where(_isColor(ResultType.blue))
-        .length;
+    return _results.map.entries.where(_notYetRevealed).where(_isColor(ResultType.blue)).length;
   }
 
   @override
@@ -1067,10 +1061,10 @@ class _GameScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(_GameScope oldWidget) {
-    return valuesHash != oldWidget.valuesHash
-        || revealedHash != oldWidget.revealedHash
-        || resultsHash != oldWidget.resultsHash
-        || codegiverMode != oldWidget.codegiverMode;
+    return valuesHash != oldWidget.valuesHash ||
+        revealedHash != oldWidget.revealedHash ||
+        resultsHash != oldWidget.resultsHash ||
+        codegiverMode != oldWidget.codegiverMode;
   }
 }
 
@@ -1143,6 +1137,8 @@ class ActionButton extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: FloatingActionButton(
+        elevation: 0,
+        shape: const CircleBorder(),
         onPressed: onPressed,
         child: Icon(icon),
       ),
@@ -1259,8 +1255,10 @@ class TileState extends State<Tile> {
 
   void _toggleRevealed() {
     GameController controller = Game.of(context);
-    controller.toggleRevealed(widget.coordinates);
-    controller.sync();
+    if (!controller.codegiverMode) {
+      controller.toggleRevealed(widget.coordinates);
+      controller.sync();
+    }
   }
 
   void _handleFocusChanged(bool hasFocus) {
@@ -1334,8 +1332,10 @@ class TileState extends State<Tile> {
                         fit: StackFit.passthrough,
                         children: [
                           gameController.theme.buildCard(value),
-                          if (isRevealed) result.build()
-                          else if (isCodegiverMode) ColoredBox(color: result.color.withAlpha(0x88)),
+                          if (isRevealed)
+                            result.build()
+                          else if (isCodegiverMode)
+                            ColoredBox(color: result.color.withAlpha(0x88)),
                         ],
                       ),
                     ),
@@ -1362,10 +1362,14 @@ sealed class Result {
 
   factory Result.fromValue(int value) {
     switch (ResultType.values[value]) {
-      case ResultType.neutral: return const Neutral();
-      case ResultType.assassin: return const Assassin();
-      case ResultType.red: return const Red();
-      case ResultType.blue: return const Blue();
+      case ResultType.neutral:
+        return const Neutral();
+      case ResultType.assassin:
+        return const Assassin();
+      case ResultType.red:
+        return const Red();
+      case ResultType.blue:
+        return const Blue();
     }
   }
 
@@ -1416,8 +1420,8 @@ class ResultMap {
     random ??= Random(DateTime.now().microsecondsSinceEpoch);
     this.firstMove = firstMove ?? _chooseRandomFirstMove(random);
     final List<Result> values = List<Result>.from(_seedValues)
-        ..add(this.firstMove)
-        ..shuffle(random);
+      ..add(this.firstMove)
+      ..shuffle(random);
     map = values.asCoordinatesMap();
   }
 
@@ -1440,20 +1444,39 @@ class ResultMap {
   late final Map<Coordinates, Result> map;
 
   static const List<Result> _seedValues = <Result>[
-    Assassin(), Neutral(), Neutral(), Neutral(), Neutral(), Neutral(), Neutral(), Neutral(),
-    Blue(), Blue(), Blue(), Blue(), Blue(), Blue(), Blue(), Blue(),
-    Red(), Red(), Red(), Red(), Red(), Red(), Red(), Red(),
+    Assassin(),
+    Neutral(),
+    Neutral(),
+    Neutral(),
+    Neutral(),
+    Neutral(),
+    Neutral(),
+    Neutral(),
+    Blue(),
+    Blue(),
+    Blue(),
+    Blue(),
+    Blue(),
+    Blue(),
+    Blue(),
+    Blue(),
+    Red(),
+    Red(),
+    Red(),
+    Red(),
+    Red(),
+    Red(),
+    Red(),
+    Red(),
   ];
 
   static Result _chooseRandomFirstMove(Random random) {
     return random.nextBool() ? const Red() : const Blue();
   }
 
-  Result operator[](Coordinates coordinates) => map[coordinates]!;
+  Result operator [](Coordinates coordinates) => map[coordinates]!;
 
   List<int> get values {
-    return map.asIndexedList()
-        .map<int>((Result result) => result.type.index)
-        .toList();
+    return map.asIndexedList().map<int>((Result result) => result.type.index).toList();
   }
 }
